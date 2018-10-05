@@ -5,23 +5,34 @@ import "../lib/Transfer.sol";
 
 
 contract StreamingApp {
+
+  enum ActionTypes {STREAM, CHANGEPRICE}
+
+  enum TurnTakers {ARTIST, USER}
+
+  struct Action {
+    ActionTypes actionType;
+    uint256 newPrice;
+    string _cid;
+  }
+
   struct AppState {
     address artist;
     address user;
     uint256 streamingPrice;
     uint256 artistBalance;
     uint256 userBalance;
+    TurnTakers lastTurn;
   }
 
-  event Stream(string _cid, uint256 time, address streamer, address artist) ;
 
-  function stream(AppState state, string _cid) public returns (bytes) {
-    require(state.userBalance >= state.streamingPrice, "user doesn't have enough balance");
-    AppState memory ret = state;
-    state.artistBalance += state.streamingPrice;
-    state.userBalance -= state.streamingPrice;
-    emit Stream(_cid, now, state.user, state.artist);
-    return abi.encode(ret);
+  
+  function isStateTerminal(AppState state) public pure returns (bool) {
+    return state.userBalance == 0;
+  }
+  
+  function getTurnTaker(AppState state) public pure returns (uint256) {
+    return uint256(state.lastTurn);
   }
 
   function resolve(AppState state, Transfer.Terms terms) public pure returns (Transfer.Transaction) {
@@ -35,10 +46,23 @@ contract StreamingApp {
     return Transfer.Transaction(terms.assetType,terms.token,to,amounts,data);
   }
 
-  function changeStreamingPrice(AppState state, uint256 newPrice) public view returns (bytes) {
-    require(msg.sender == state.artist, "sender must be artist");
-    AppState memory ret = state;
-    state.streamingPrice = newPrice;
-    return abi.encode(ret);
+  function applyAction(AppState state, Action action) public view returns (bytes) {
+    AppState memory newState;
+    if (action.actionType == ActionTypes.STREAM) {
+      require(state.userBalance >= state.streamingPrice, "user doesn't have enough balance");
+      newState = state;
+      state.artistBalance += state.streamingPrice;
+      state.userBalance -= state.streamingPrice;
+      state.lastTurn = TurnTakers.USER;
+    } else if (action.actionType == ActionTypes.CHANGEPRICE) {
+      require(msg.sender == state.artist, "sender must be artist");
+      newState = state;
+      state.streamingPrice = action.newPrice;
+      state.lastTurn = TurnTakers.ARTIST;
+    } else {
+      revert("Invalid action type");
+    }
+    return abi.encode(newState);
   }
+
 }
