@@ -18,12 +18,27 @@ const [Artist, User] = [
   )
 ];
 
-const getUpdateHash = (stateHash: string, nonce: number, timeout: number) =>
-  ethers.utils.solidityKeccak256(
-    ["bytes1", "address[]", "uint256", "uint256", "bytes32"],
-    ["0x19", [Artist.address, User.address], nonce, timeout, stateHash]
+const computeStateHash = (stateHash: string, nonce: number, timeout: number) =>
+  ethers.utils.keccak256(
+    ethers.utils.solidityPack(
+      ["bytes1", "address[]", "uint256", "uint256", "bytes32"],
+      ["0x19", [Artist.address, User.address], nonce, timeout, stateHash]
+    )
   );
 
+const computeActionHash = (
+  turn: string,
+  prevState: string,
+  action: string,
+  setStateNonce: number,
+  disputeNonce: number
+) =>
+  ethers.utils.keccak256(
+    ethers.utils.solidityPack(
+      ["bytes1", "address", "bytes32", "bytes", "uint256", "uint256"],
+      ["0x19", turn, prevState, action, setStateNonce, disputeNonce]
+    )
+  );
 contract("StreamingApp", (accounts: string[]) => {
   let st: ethers.Contract;
   let stateChannel: ethers.Contract;
@@ -34,12 +49,18 @@ contract("StreamingApp", (accounts: string[]) => {
     ANY
   }
 
+  enum TurnTakers {
+    ARTIST,
+    USER
+  }
+
   const exampleState = {
     artist: Artist.address,
     user: User.address,
     streamingPrice: Utils.UNIT_ETH,
     artistBalance: 0,
-    userBalance: Utils.UNIT_ETH.mul(5)
+    userBalance: Utils.UNIT_ETH.mul(5),
+    lastTurn: TurnTakers.USER
   };
 
   const encode = (encoding: string, state: any) =>
@@ -51,18 +72,17 @@ contract("StreamingApp", (accounts: string[]) => {
   const latestNonce = async () => stateChannel.functions.latestNonce();
 
   const stEncoding =
-    "tuple(address artist, address user, uint256 streamingPrice, uint256 artistBalance, uint256 userBalance)";
+    "tuple(address artist, address user, uint256 streamingPrice, uint256 artistBalance, uint256 userBalance, uint8 lastTurn)";
 
   const appEncoding =
-    "tuple(address addr, bytes4 applyAction, bytes4 resolve, bytes4 getTurnTaker, bytes4 isStateTerminal)";
+    "tuple(address addr, bytes4 isStateTerminal, bytes4 getTurnTaker, bytes4 resolve, bytes4 applyAction)";
 
   const termsEncoding = "tuple(uint8 assetType, uint256 limit, address token)";
 
   const detailsEncoding =
     "tuple(uint8 assetType, address token, address[] to, uint256[] amount, bytes data)";
 
-  const keccak256 = (bytes: string) =>
-    ethers.utils.solidityKeccak256(["bytes"], [bytes]);
+  const { keccak256 } = ethers.utils;
 
   const sendUpdateToChainWithNonce = (nonce: number, appState?: string) =>
     stateChannel.functions.setState(
@@ -78,7 +98,7 @@ contract("StreamingApp", (accounts: string[]) => {
       nonce,
       10,
       Utils.signMessage(
-        getUpdateHash(appState || Utils.ZERO_BYTES32, nonce, 10),
+        computeStateHash(appState || Utils.ZERO_BYTES32, nonce, 10),
         unlockedAccount
       )
     );
@@ -89,7 +109,11 @@ contract("StreamingApp", (accounts: string[]) => {
       await latestNonce(),
       0,
       Utils.signMessage(
-        getUpdateHash(stateHash || Utils.ZERO_BYTES32, await latestNonce(), 0),
+        computeStateHash(
+          stateHash || Utils.ZERO_BYTES32,
+          await latestNonce(),
+          0
+        ),
         unlockedAccount
       )
     );
@@ -111,9 +135,9 @@ contract("StreamingApp", (accounts: string[]) => {
     app = {
       addr: st.address,
       resolve: st.interface.functions.resolve.sighash,
-      applyAction: "0x00000000",
-      getTurnTaker: "0x00000000",
-      isStateTerminal: "0x00000000"
+      isStateTerminal: st.interface.functions.resolve.sighash,
+      getTurnTaker: st.interface.functions.getTurnTaker.sighash,
+      applyAction: st.interface.functions.applyAction.sighash
     };
 
     terms = {
@@ -147,12 +171,20 @@ contract("StreamingApp", (accounts: string[]) => {
     ret.value[1].should.be.bignumber.eq(Utils.UNIT_ETH.mul(5));
   });
 
+  //   it("should make changes to state when stream is called", async() => {
+  //     const ret = await st.functions.stream(exampleState, 'cid');
+  //     console.log(ret);
+  //     ret.artistBalance.should.be.bignumber.eq(Utils.UNIT_ETH);
+  //     ret.userBalance.should.be.bignumber.eq(Utils.UNIT_ETH.mul(4));
+  //   });
+
   describe("setting a resolution", async () => {
     it("should fail before state is settled", async () => {
       const finalState = encode(stEncoding, exampleState);
       await Utils.assertRejects(
         stateChannel.functions.setResolution(
           app,
+          encode(appEncoding, app),
           finalState,
           encode(termsEncoding, terms)
         )
@@ -163,6 +195,7 @@ contract("StreamingApp", (accounts: string[]) => {
       await sendSignedFinalizationToChain(keccak256(finalState));
       await stateChannel.functions.setResolution(
         app,
+        encode(appEncoding, app),
         finalState,
         encode(termsEncoding, terms)
       );
@@ -175,4 +208,52 @@ contract("StreamingApp", (accounts: string[]) => {
       ret.value[1].should.be.bignumber.eq(Utils.UNIT_ETH.mul(5));
     });
   });
+
+  //   describe("handling a dispute", async () => {
+  //     enum ActionTypes {
+  //         STREAM,
+  //         CHANGEPRICE
+  //       }
+
+  //     enum Status {
+  //         ON,
+  //         DISPUTE,
+  //         OFF
+  //       }
+
+  //       const actionEncoding = "tuple(uint8 actionType, uint256 newPrice, string _cid)";
+
+  //       const state = encode(stEncoding, exampleState);
+
+  //       it("should update state based on applyAction", async() => {
+  //           const action = {
+  //               actionType: ActionTypes.STREAM,
+  //               newPrice: 0,
+  //               _cid : 'cid'
+  //           };
+
+  //           const h1 = computeStateHash(keccak256(state), 1, 10);
+  //           const h2 = computeActionHash(
+  //               User.address,
+  //               keccak256(state),
+  //               encode(actionEncoding, action),
+  //               1,
+  //               0
+  //           );
+
+  //           await stateChannel.functions.createDispute(
+  //               app,
+  //               state,
+  //               1,
+  //               10,
+  //               encode(actionEncoding, action),
+  //               Utils.signMessage(h1, Artist, User),
+  //               Utils.signMessage(h2, User),
+  //               false
+  //           );
+
+  //           const onchain = await stateChannel.
+  //       })
+
+  //   })
 });
