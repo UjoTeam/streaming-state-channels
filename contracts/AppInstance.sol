@@ -384,7 +384,7 @@ contract AppInstance {
   /// @param finalState The ABI encoded version of the finalized application state
   /// @param terms The ABI encoded version of the already agreed upon terms
   /// @dev Note this function is only callable when the state channel is in an OFF state
-  function setResolution(App appStruct, bytes app, bytes finalState, bytes terms)
+  function setResolution(App app, bytes finalState, bytes terms)
     public
     onlyWhenChannelClosed
   {
@@ -399,11 +399,11 @@ contract AppInstance {
     );
 
     require(
-      keccak256(app) == appHash,
+      keccak256(abi.encode(app)) == appHash,
       "Tried to set resolution with non-agreed upon app"
     );
 
-    resolution = getAppResolution(appStruct, finalState, terms);
+    resolution = getAppResolution(app, finalState, terms);
   }
 
   /// @notice A helper method to check if the state of the channel is final by

@@ -8,7 +8,6 @@ contract StreamingApp {
 
   enum ActionTypes {STREAM, CHANGEPRICE}
 
-  enum TurnTakers {ARTIST, USER}
 
   struct Action {
     ActionTypes actionType;
@@ -22,7 +21,6 @@ contract StreamingApp {
     uint256 streamingPrice;
     uint256 artistBalance;
     uint256 userBalance;
-    TurnTakers lastTurn;
   }
 
 
@@ -30,9 +28,6 @@ contract StreamingApp {
     return true;
   }
   
-  function getTurnTaker(AppState state) public pure returns (uint256) {
-    return uint256(state.lastTurn);
-  }
 
   function resolve(AppState state, Transfer.Terms terms) public pure returns (Transfer.Transaction) {
     uint256[] memory amounts = new uint256[](2);
@@ -52,12 +47,10 @@ contract StreamingApp {
       newState = state;
       state.artistBalance += state.streamingPrice;
       state.userBalance -= state.streamingPrice;
-      state.lastTurn = TurnTakers.USER;
     } else if (action.actionType == ActionTypes.CHANGEPRICE) {
       require(msg.sender == state.artist, "sender must be artist");
       newState = state;
       state.streamingPrice = action.newPrice;
-      state.lastTurn = TurnTakers.ARTIST;
     } else {
       revert("Invalid action type");
     }

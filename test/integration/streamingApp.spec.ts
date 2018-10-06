@@ -49,18 +49,12 @@ contract("StreamingApp", (accounts: string[]) => {
     ANY
   }
 
-  enum TurnTakers {
-    ARTIST,
-    USER
-  }
-
   const exampleState = {
     artist: Artist.address,
     user: User.address,
     streamingPrice: Utils.UNIT_ETH,
     artistBalance: 0,
-    userBalance: Utils.UNIT_ETH.mul(5),
-    lastTurn: TurnTakers.USER
+    userBalance: Utils.UNIT_ETH.mul(5)
   };
 
   const encode = (encoding: string, state: any) =>
@@ -72,10 +66,10 @@ contract("StreamingApp", (accounts: string[]) => {
   const latestNonce = async () => stateChannel.functions.latestNonce();
 
   const stEncoding =
-    "tuple(address artist, address user, uint256 streamingPrice, uint256 artistBalance, uint256 userBalance, uint8 lastTurn)";
+    "tuple(address artist, address user, uint256 streamingPrice, uint256 artistBalance, uint256 userBalance)";
 
   const appEncoding =
-    "tuple(address addr, bytes4 isStateTerminal, bytes4 getTurnTaker, bytes4 resolve, bytes4 applyAction)";
+    "tuple(address addr, bytes4 applyAction, bytes4 resolve, bytes4 getTurnTaker, bytes4 isStateTerminal)";
 
   const termsEncoding = "tuple(uint8 assetType, uint256 limit, address token)";
 
@@ -136,7 +130,7 @@ contract("StreamingApp", (accounts: string[]) => {
       addr: st.address,
       resolve: st.interface.functions.resolve.sighash,
       isStateTerminal: st.interface.functions.resolve.sighash,
-      getTurnTaker: st.interface.functions.getTurnTaker.sighash,
+      getTurnTaker: "0x00000000",
       applyAction: st.interface.functions.applyAction.sighash
     };
 
@@ -171,20 +165,12 @@ contract("StreamingApp", (accounts: string[]) => {
     ret.value[1].should.be.bignumber.eq(Utils.UNIT_ETH.mul(5));
   });
 
-  //   it("should make changes to state when stream is called", async() => {
-  //     const ret = await st.functions.stream(exampleState, 'cid');
-  //     console.log(ret);
-  //     ret.artistBalance.should.be.bignumber.eq(Utils.UNIT_ETH);
-  //     ret.userBalance.should.be.bignumber.eq(Utils.UNIT_ETH.mul(4));
-  //   });
-
   describe("setting a resolution", async () => {
     it("should fail before state is settled", async () => {
       const finalState = encode(stEncoding, exampleState);
       await Utils.assertRejects(
         stateChannel.functions.setResolution(
           app,
-          encode(appEncoding, app),
           finalState,
           encode(termsEncoding, terms)
         )
@@ -195,7 +181,6 @@ contract("StreamingApp", (accounts: string[]) => {
       await sendSignedFinalizationToChain(keccak256(finalState));
       await stateChannel.functions.setResolution(
         app,
-        encode(appEncoding, app),
         finalState,
         encode(termsEncoding, terms)
       );
