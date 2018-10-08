@@ -6,8 +6,9 @@ import "../lib/Transfer.sol";
 
 contract StreamingApp {
 
-  enum ActionTypes {STREAM, CHANGEPRICE}
+  enum ActionTypes {STREAM}
 
+  enum TurnTakers {USER, ARTIST}
 
   struct Action {
     ActionTypes actionType;
@@ -23,6 +24,9 @@ contract StreamingApp {
     uint256 userBalance;
   }
 
+  function getTurnTaker(AppState state) public pure returns (uint256) {
+    return uint256(TurnTakers.USER);
+  }
 
   function isStateTerminal(AppState state) public pure returns (bool) {
     return true;
@@ -40,17 +44,13 @@ contract StreamingApp {
     return Transfer.Transaction(terms.assetType,terms.token,to,amounts,data);
   }
 
-  function applyAction(AppState state, Action action) public view returns (bytes) {
+  function applyAction(AppState state, Action action) public pure returns (bytes) {
     AppState memory newState;
     if (action.actionType == ActionTypes.STREAM) {
       require(state.userBalance >= state.streamingPrice, "user doesn't have enough balance");
       newState = state;
       state.artistBalance += state.streamingPrice;
       state.userBalance -= state.streamingPrice;
-    } else if (action.actionType == ActionTypes.CHANGEPRICE) {
-      require(msg.sender == state.artist, "sender must be artist");
-      newState = state;
-      state.streamingPrice = action.newPrice;
     } else {
       revert("Invalid action type");
     }

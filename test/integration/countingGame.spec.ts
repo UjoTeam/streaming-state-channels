@@ -200,6 +200,11 @@ contract("CountingApp", (accounts: string[]) => {
       };
 
       const h1 = computeStateHash(keccak256(state), 1, 10);
+      console.log(h1);
+      console.log(
+        await stateChannel.functions.computeStateHash(keccak256(state), 1, 10)
+      );
+      console.log(Utils.signMessage(h1, A, B));
       const h2 = computeActionHash(
         A.address,
         keccak256(state),

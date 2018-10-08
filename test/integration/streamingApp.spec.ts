@@ -22,7 +22,7 @@ const computeStateHash = (stateHash: string, nonce: number, timeout: number) =>
   ethers.utils.keccak256(
     ethers.utils.solidityPack(
       ["bytes1", "address[]", "uint256", "uint256", "bytes32"],
-      ["0x19", [Artist.address, User.address], nonce, timeout, stateHash]
+      ["0x19", [User.address, Artist.address], nonce, timeout, stateHash]
     )
   );
 
@@ -42,7 +42,7 @@ const computeActionHash = (
 contract("StreamingApp", (accounts: string[]) => {
   let st: ethers.Contract;
   let stateChannel: ethers.Contract;
-
+  let testSig: ethers.Contract;
   enum AssetType {
     ETH,
     ERC20,
@@ -125,12 +125,14 @@ contract("StreamingApp", (accounts: string[]) => {
     StateChannel.link("Signatures", Signatures.address);
     StateChannel.link("StaticCall", StaticCall.address);
     StateChannel.link("Transfer", Transfer.address);
-
+    const TestSignatures = artifacts.require("TestSignatures");
+    TestSignatures.link("Signatures", Signatures.address);
+    testSig = await Utils.deployContract(TestSignatures, unlockedAccount);
     app = {
       addr: st.address,
       resolve: st.interface.functions.resolve.sighash,
       isStateTerminal: st.interface.functions.resolve.sighash,
-      getTurnTaker: "0x00000000",
+      getTurnTaker: st.interface.functions.getTurnTaker.sighash,
       applyAction: st.interface.functions.applyAction.sighash
     };
 
@@ -148,7 +150,7 @@ contract("StreamingApp", (accounts: string[]) => {
 
     stateChannel = await contractFactory.deploy(
       accounts[0],
-      [Artist.address, User.address],
+      [User.address, Artist.address],
       keccak256(encode(appEncoding, app)),
       keccak256(encode(termsEncoding, terms)),
       10
@@ -194,51 +196,76 @@ contract("StreamingApp", (accounts: string[]) => {
     });
   });
 
-  //   describe("handling a dispute", async () => {
-  //     enum ActionTypes {
-  //         STREAM,
-  //         CHANGEPRICE
-  //       }
+  describe("handling a dispute", async () => {
+    enum ActionTypes {
+      STREAM,
+      CHANGEPRICE
+    }
 
-  //     enum Status {
-  //         ON,
-  //         DISPUTE,
-  //         OFF
-  //       }
+    enum Status {
+      ON,
+      DISPUTE,
+      OFF
+    }
 
-  //       const actionEncoding = "tuple(uint8 actionType, uint256 newPrice, string _cid)";
+    const actionEncoding =
+      "tuple(uint8 actionType, uint256 newPrice, string _cid)";
 
-  //       const state = encode(stEncoding, exampleState);
+    const state = encode(stEncoding, exampleState);
 
-  //       it("should update state based on applyAction", async() => {
-  //           const action = {
-  //               actionType: ActionTypes.STREAM,
-  //               newPrice: 0,
-  //               _cid : 'cid'
-  //           };
+    it("should update state based on applyAction", async () => {
+      const action = {
+        actionType: ActionTypes.STREAM,
+        newPrice: 0,
+        _cid: "cid"
+      };
 
-  //           const h1 = computeStateHash(keccak256(state), 1, 10);
-  //           const h2 = computeActionHash(
-  //               User.address,
-  //               keccak256(state),
-  //               encode(actionEncoding, action),
-  //               1,
-  //               0
-  //           );
+      const h1 = computeStateHash(keccak256(state), 1, 10);
+      // console.log(h1);
+      // console.log(await stateChannel.functions.computeStateHash(keccak256(state), 1, 10));
+      // console.log(Utils.signMessage(h1, Artist, User));
+      // console.log(await testSig.functions.verify(Utils.signMessage(h1, Artist, User), h1, [User.address, Artist.address]));
+      // console.log(await testSig.functions.recover(Utils.signMessage(h1, Artist, User), h1, 0));
+      // console.log(await testSig.functions.recover(Utils.signMessage(h1, Artist, User), h1, 1));
+      // console.log(User.address);
+      // console.log(Artist.address);
+      // console.log(await stateChannel.functions.getSigners());
+      const h2 = computeActionHash(
+        User.address,
+        keccak256(state),
+        encode(actionEncoding, action),
+        1,
+        0
+      );
 
-  //           await stateChannel.functions.createDispute(
-  //               app,
-  //               state,
-  //               1,
-  //               10,
-  //               encode(actionEncoding, action),
-  //               Utils.signMessage(h1, Artist, User),
-  //               Utils.signMessage(h2, User),
-  //               false
-  //           );
+      await stateChannel.functions.createDispute(
+        app,
+        state,
+        1,
+        10,
+        encode(actionEncoding, action),
+        Utils.signMessage(h1, Artist, User),
+        Utils.signMessage(h2, User),
+        false
+      );
 
-  //           const onchain = await stateChannel.
-  //       })
+      const onchain = await stateChannel.functions.state();
 
-  //   })
+      const expectedState = {
+        ...exampleState,
+        artistBalance: Utils.UNIT_ETH,
+        userBalance: Utils.UNIT_ETH.mul(4)
+      };
+      const expectedStateHash = keccak256(encode(stEncoding, expectedState));
+      const expectedFinalizeBlock = (await provider.getBlockNumber()) + 10;
+
+      onchain.status.should.be.bignumber.eq(Status.DISPUTE);
+      onchain.appStateHash.should.be.equalIgnoreCase(expectedStateHash);
+      onchain.latestSubmitter.should.be.equalIgnoreCase(accounts[0]);
+      onchain.nonce.should.be.bignumber.eq(1);
+      onchain.disputeNonce.should.be.bignumber.eq(0);
+      onchain.disputeCounter.should.be.bignumber.eq(1);
+      onchain.finalizesAt.should.be.bignumber.eq(expectedFinalizeBlock);
+    });
+  });
 });
