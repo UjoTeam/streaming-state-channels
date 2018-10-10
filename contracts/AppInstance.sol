@@ -426,7 +426,7 @@ contract AppInstance {
   /// @param timeout A dynamic timeout value representing the timeout for this state
   /// @return A bytes32 hash of the arguments encoded with the signing keys for the channel
   function computeStateHash(bytes32 stateHash, uint256 nonce, uint256 timeout)
-    internal
+    public
     view
     returns (bytes32)
   {
@@ -537,11 +537,5 @@ contract AppInstance {
     );
   }
 
-  function getAppHash() public view returns (bytes32){
-    return appHash;
-  }
 
-  function getEncodedAppHash(App app) public view returns (bytes32) {
-    return keccak256(abi.encode(app));
-  }
 }

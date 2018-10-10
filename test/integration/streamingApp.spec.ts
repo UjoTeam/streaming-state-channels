@@ -43,6 +43,7 @@ contract("StreamingApp", (accounts: string[]) => {
   let st: ethers.Contract;
   let stateChannel: ethers.Contract;
   let testSig: ethers.Contract;
+  let testCaller: ethers.Contract;
   enum AssetType {
     ETH,
     ERC20,
@@ -53,8 +54,7 @@ contract("StreamingApp", (accounts: string[]) => {
     artist: Artist.address,
     user: User.address,
     streamingPrice: Utils.UNIT_ETH,
-    artistBalance: 0,
-    userBalance: Utils.UNIT_ETH.mul(5)
+    totalTransfer: 0
   };
 
   const encode = (encoding: string, state: any) =>
@@ -66,7 +66,7 @@ contract("StreamingApp", (accounts: string[]) => {
   const latestNonce = async () => stateChannel.functions.latestNonce();
 
   const stEncoding =
-    "tuple(address artist, address user, uint256 streamingPrice, uint256 artistBalance, uint256 userBalance)";
+    "tuple(address artist, address user, uint256 streamingPrice, uint256 totalTransfer)";
 
   const appEncoding =
     "tuple(address addr, bytes4 applyAction, bytes4 resolve, bytes4 getTurnTaker, bytes4 isStateTerminal)";
@@ -117,7 +117,6 @@ contract("StreamingApp", (accounts: string[]) => {
 
   beforeEach(async () => {
     st = await Utils.deployContract(StreamingApp, unlockedAccount);
-
     const StateChannel = artifacts.require("AppInstance");
     const StaticCall = artifacts.require("StaticCall");
     const Signatures = artifacts.require("Signatures");
@@ -127,7 +126,10 @@ contract("StreamingApp", (accounts: string[]) => {
     StateChannel.link("Transfer", Transfer.address);
     const TestSignatures = artifacts.require("TestSignatures");
     TestSignatures.link("Signatures", Signatures.address);
+    const TestCall = artifacts.require("TestCaller");
+    TestCall.link("StaticCall", StaticCall.address);
     testSig = await Utils.deployContract(TestSignatures, unlockedAccount);
+    testCaller = await Utils.deployContract(TestCall, unlockedAccount);
     app = {
       addr: st.address,
       resolve: st.interface.functions.resolve.sighash,
@@ -164,7 +166,7 @@ contract("StreamingApp", (accounts: string[]) => {
     ret.to[0].should.be.equalIgnoreCase(Artist.address);
     ret.to[1].should.be.equalIgnoreCase(User.address);
     ret.value[0].should.be.bignumber.eq(0);
-    ret.value[1].should.be.bignumber.eq(Utils.UNIT_ETH.mul(5));
+    ret.value[1].should.be.bignumber.eq(0);
   });
 
   describe("setting a resolution", async () => {
@@ -192,14 +194,13 @@ contract("StreamingApp", (accounts: string[]) => {
       ret.to[0].should.be.equalIgnoreCase(Artist.address);
       ret.to[1].should.be.equalIgnoreCase(User.address);
       ret.value[0].should.be.bignumber.eq(0);
-      ret.value[1].should.be.bignumber.eq(Utils.UNIT_ETH.mul(5));
+      ret.value[1].should.be.bignumber.eq(0);
     });
   });
 
   describe("handling a dispute", async () => {
     enum ActionTypes {
-      STREAM,
-      CHANGEPRICE
+      STREAM
     }
 
     enum Status {
@@ -208,18 +209,32 @@ contract("StreamingApp", (accounts: string[]) => {
       OFF
     }
 
-    const actionEncoding =
-      "tuple(uint8 actionType, uint256 newPrice, string _cid)";
+    const actionEncoding = "tuple(uint8 actionType, string _cid)";
 
     const state = encode(stEncoding, exampleState);
+
+    it("should change state when streamed", async () => {
+      const action = {
+        actionType: ActionTypes.STREAM,
+        _cid: "cid"
+      };
+      const ret = await st.functions.applyAction(exampleState, action);
+      const dec = decode(stEncoding, ret);
+      dec[0].totalTransfer.should.be.eql(Utils.UNIT_ETH);
+    });
 
     it("should update state based on applyAction", async () => {
       const action = {
         actionType: ActionTypes.STREAM,
-        newPrice: 0,
         _cid: "cid"
       };
 
+      await testCaller.functions.execCall(
+        app.addr,
+        app.applyAction,
+        state,
+        encode(actionEncoding, action)
+      );
       const h1 = computeStateHash(keccak256(state), 1, 10);
       // console.log(h1);
       // console.log(await stateChannel.functions.computeStateHash(keccak256(state), 1, 10));
@@ -238,23 +253,22 @@ contract("StreamingApp", (accounts: string[]) => {
         0
       );
 
-      await stateChannel.functions.createDispute(
-        app,
-        state,
-        1,
-        10,
-        encode(actionEncoding, action),
-        Utils.signMessage(h1, Artist, User),
-        Utils.signMessage(h2, User),
-        false
-      );
+      // await stateChannel.functions.createDispute(
+      //   app,
+      //   state,
+      //   1,
+      //   10,
+      //   encode(actionEncoding, action),
+      //   Utils.signMessage(h1, Artist, User),
+      //   Utils.signMessage(h2, User),
+      //   false
+      // );
 
       const onchain = await stateChannel.functions.state();
 
       const expectedState = {
         ...exampleState,
-        artistBalance: Utils.UNIT_ETH,
-        userBalance: Utils.UNIT_ETH.mul(4)
+        totalTransfer: Utils.UNIT_ETH
       };
       const expectedStateHash = keccak256(encode(stEncoding, expectedState));
       const expectedFinalizeBlock = (await provider.getBlockNumber()) + 10;

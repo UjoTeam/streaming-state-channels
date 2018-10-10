@@ -8,11 +8,8 @@ contract StreamingApp {
 
   enum ActionTypes {STREAM}
 
-  enum TurnTakers {USER, ARTIST}
-
   struct Action {
     ActionTypes actionType;
-    uint256 newPrice;
     string _cid;
   }
 
@@ -20,14 +17,14 @@ contract StreamingApp {
     address artist;
     address user;
     uint256 streamingPrice;
-    uint256 artistBalance;
-    uint256 userBalance;
+    uint256 totalTransfer;
   }
+
 
   function getTurnTaker(AppState state) public pure returns (uint256) {
-    return uint256(TurnTakers.USER);
+    return 0;
   }
-
+  
   function isStateTerminal(AppState state) public pure returns (bool) {
     return true;
   }
@@ -35,8 +32,8 @@ contract StreamingApp {
 
   function resolve(AppState state, Transfer.Terms terms) public pure returns (Transfer.Transaction) {
     uint256[] memory amounts = new uint256[](2);
-    amounts[0] = state.artistBalance;
-    amounts[1] = state.userBalance;
+    amounts[0] = state.totalTransfer;
+    amounts[1] = 0;
     address[] memory to = new address[](2);
     to[0] = state.artist;
     to[1] = state.user;
@@ -47,10 +44,8 @@ contract StreamingApp {
   function applyAction(AppState state, Action action) public pure returns (bytes) {
     AppState memory newState;
     if (action.actionType == ActionTypes.STREAM) {
-      require(state.userBalance >= state.streamingPrice, "user doesn't have enough balance");
       newState = state;
-      state.artistBalance += state.streamingPrice;
-      state.userBalance -= state.streamingPrice;
+      state.totalTransfer += state.streamingPrice;
     } else {
       revert("Invalid action type");
     }
