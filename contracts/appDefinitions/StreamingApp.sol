@@ -6,50 +6,79 @@ import "../lib/Transfer.sol";
 
 contract StreamingApp {
 
-  enum ActionTypes {STREAM}
+  enum ActionTypes { STREAM}
 
   struct Action {
     ActionTypes actionType;
-    string _cid;
+    uint256 _cid;
   }
 
   struct AppState {
-    address artist;
     address user;
-    uint256 streamingPrice;
+    address artist;
     uint256 totalTransfer;
+    uint256 streamingPrice;
   }
 
-
-  function getTurnTaker(AppState state) public pure returns (uint256) {
-    return 0;
-  }
-  
-  function isStateTerminal(AppState state) public pure returns (bool) {
+  function isStateTerminal(AppState state)
+    public
+    pure
+    returns (bool)
+  {
     return true;
   }
-  
 
-  function resolve(AppState state, Transfer.Terms terms) public pure returns (Transfer.Transaction) {
+  function getTurnTaker(AppState state)
+    public
+    pure
+    returns (uint256)
+  {
+    return 0;
+  }
+
+  function resolve(AppState state, Transfer.Terms terms)
+    public
+    pure
+    returns (Transfer.Transaction)
+  {
     uint256[] memory amounts = new uint256[](2);
     amounts[0] = state.totalTransfer;
     amounts[1] = 0;
+
     address[] memory to = new address[](2);
-    to[0] = state.artist;
-    to[1] = state.user;
+    to[0] = state.user;
+    to[1] = state.artist;
     bytes[] memory data = new bytes[](2);
-    return Transfer.Transaction(terms.assetType,terms.token,to,amounts,data);
+
+    return Transfer.Transaction(
+      terms.assetType,
+      terms.token,
+      to,
+      amounts,
+      data
+    );
   }
 
-  function applyAction(AppState state, Action action) public pure returns (bytes) {
-    AppState memory newState;
+  function applyAction(AppState state, Action action)
+    public
+    pure
+    returns (bytes)
+  {
     if (action.actionType == ActionTypes.STREAM) {
-      newState = state;
-      state.totalTransfer += state.streamingPrice;
+      return onStream(state, action);
     } else {
       revert("Invalid action type");
     }
-    return abi.encode(newState);
+  }
+
+  function onStream(AppState state, Action inc)
+    public
+    pure
+    returns (bytes)
+  {
+    AppState memory ret = state;
+    state.totalTransfer += state.streamingPrice;
+    return abi.encode(ret);
   }
 
 }

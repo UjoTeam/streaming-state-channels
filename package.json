@@ -39,7 +39,7 @@
     ]
   },
   "config": {
-    "testFiles": "lib/**/**/StreamingApp.spec.js",
+    "testFiles": "lib/**/**/StreamingApp.spec.js lib/**/**/countingGame.spec.js",
     "unlockedAccount": "0xf2f48ee19680706196e2e339e5da3491186e0c4c5030670656b0e0164837257d,1000000000000000000000000",
     "mnemonic": "concert load couple harbor equip island argue ramp clarify fence smart topic"
   },
