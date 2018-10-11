@@ -6,17 +6,18 @@ import "../lib/Transfer.sol";
 
 contract CountingApp {
 
-  enum ActionTypes { STREAM}
+  enum ActionTypes { INCREMENT, DECREMENT}
 
   struct Action {
     ActionTypes actionType;
-    uint256 streamingPrice;
+    uint256 byHowMuch;
   }
 
   struct AppState {
-    address user;
-    address artist;
+    address player1;
+    address player2;
     uint256 count;
+    uint256 turnNum;
   }
 
   function isStateTerminal(AppState state)
@@ -24,7 +25,7 @@ contract CountingApp {
     pure
     returns (bool)
   {
-    return true;
+    return state.count == 2;
   }
 
   function getTurnTaker(AppState state)
@@ -32,7 +33,7 @@ contract CountingApp {
     pure
     returns (uint256)
   {
-    return 0;
+    return state.turnNum % 2;
   }
 
   function resolve(AppState state, Transfer.Terms terms)
@@ -41,12 +42,12 @@ contract CountingApp {
     returns (Transfer.Transaction)
   {
     uint256[] memory amounts = new uint256[](2);
-    amounts[0] = state.count;
+    amounts[0] = terms.limit;
     amounts[1] = 0;
 
     address[] memory to = new address[](2);
-    to[0] = state.user;
-    to[1] = state.artist;
+    to[0] = state.player1;
+    to[1] = state.player2;
     bytes[] memory data = new bytes[](2);
 
     return Transfer.Transaction(
@@ -63,22 +64,35 @@ contract CountingApp {
     pure
     returns (bytes)
   {
-    if (action.actionType == ActionTypes.STREAM) {
-      return onStream(state, action);
+    if (action.actionType == ActionTypes.INCREMENT) {
+      return onIncrement(state, action);
+    } else if (action.actionType == ActionTypes.DECREMENT) {
+      return onDecrement(state, action);
     } else {
       revert("Invalid action type");
     }
   }
 
-  function onStream(AppState state, Action inc)
+  function onIncrement(AppState state, Action inc)
     public
     pure
     returns (bytes)
   {
     AppState memory ret = state;
-    state.count += inc.streamingPrice;
+    state.count += inc.byHowMuch;
+    state.turnNum += 1;
     return abi.encode(ret);
   }
 
+  function onDecrement(AppState state, Action dec)
+    public
+    pure
+    returns (bytes)
+  {
+    AppState memory ret = state;
+    state.count -= dec.byHowMuch;
+    state.turnNum += 1;
+    return abi.encode(ret);
+  }
 
 }

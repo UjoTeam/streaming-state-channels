@@ -203,11 +203,6 @@ contract("StreamingApp", (accounts: string[]) => {
       };
 
       const h1 = computeStateHash(keccak256(state), 1, 10);
-      console.log(h1);
-      console.log(
-        await stateChannel.functions.computeStateHash(keccak256(state), 1, 10)
-      );
-      console.log(Utils.signMessage(h1, User, Artist));
       const h2 = computeActionHash(
         User.address,
         keccak256(state),
@@ -282,34 +277,5 @@ contract("StreamingApp", (accounts: string[]) => {
       channelState.disputeCounter.should.be.bignumber.eq(1);
       channelState.finalizesAt.should.be.bignumber.eq(expectedFinalizeBlock);
     });
-
-    // it("should fail when trying to finalize a non-final state", async () => {
-    //   const action = {
-    //     actionType: ActionTypes.STREAM,
-    //     streamingPrice: 1.0
-    //   };
-
-    //   const h1 = computeStateHash(keccak256(state), 1, 10);
-    //   const h2 = computeActionHash(
-    //     User.address,
-    //     keccak256(state),
-    //     encode(actionEncoding, action),
-    //     1,
-    //     0
-    //   );
-
-    //   await Utils.assertRejects(
-    //     stateChannel.functions.createDispute(
-    //       app,
-    //       state,
-    //       1,
-    //       10,
-    //       encode(actionEncoding, action),
-    //       Utils.signMessage(h1, User, Artist),
-    //       Utils.signMessage(h2, User),
-    //       true
-    //     )
-    //   );
-    // });
   });
 });
